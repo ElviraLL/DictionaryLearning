@@ -1,10 +1,10 @@
 clc;
 clear; 
 lambda = 5.0000e-04;
-N = 2^3; %dimension for signal N = d = m
+N = 2^5; %dimension for signal N = d = m
 p = 100; %number of observations 
 num_of_matrix = log2(N);
-iterations = 20;
+iterations = 1000;
 
 fprintf("Generating X...\n");
 for i = 1:p
@@ -41,7 +41,7 @@ end
 
 A = get_A(B,P);
 % A = dftmtx(N);
-fprintf("A is a dft matrix: %d\n", A == dftmtx(N));
+fprintf("A is a dft matrix: %d\n", norm(A - dftmtx(N)) < 0.0001);
 Y = A * X;
 
 
@@ -69,7 +69,7 @@ for idx = 1:num_of_matrix
     Bhat{idx} = Bi;
 end
 
-Xhat = updateX(P, B, Y, N , p, num_of_matrix, lambda, X);
+Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, lambda, X);
 
 
 
@@ -128,7 +128,7 @@ while iter < iterations
     
     
     
-    Xhat = updateX(P, B, Y, N , p, num_of_matrix, lambda, X);
+    Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, lambda, X);
 
     
     
@@ -175,7 +175,7 @@ while iter < iterations
         fprintf("    target is %f\n", norm(Lfix * kron(eye(N/2^idx), Bidx) * Rfix - Y, 'fro'))
     end
     B_est{iter} = Bhat;
-    Xhat = updateX(P, B, Y, N , p, num_of_matrix, lambda, X);
+    Xhat = updateX(Pbat, Bhat, Y, N , p, num_of_matrix, lambda, X);
 
     fprintf("    Error in A is %f\n", norm(A - get_A(Bhat,Phat), 'fro'));
     fprintf("    Error in Y is %f\n", norm(Y - get_A(Bhat,Phat) * Xhat, 'fro'));

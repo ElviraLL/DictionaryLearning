@@ -1,21 +1,28 @@
 clc;
 clear;
-data = load("cifar-10-batches-mat/data_batch_1.mat");
-data = data.data;
+dat = load("cifar-10-batches-mat/data_batch_1.mat");
+data = dat.data;
+
 
 % 10000 * ?32 * 32 * 3) images, sparse in 2 dimensional fourier transform
 for i = 1 : 100
     img = reshape(data(i,:),[32,32,3]);
     image_gray{i} = rgb2gray(img);
-    Y(:,i) = double(reshape(image_gray{i}(16:17,15:18),[8,1]));
+    Y(:,i) = double(reshape(image_gray{i}(17:18,15:18),[8,1]));
 end
 
-lambda = 5.0000e-02;
+y = Y(:);
 N = 8;
 p = 100;
+lambda = 0.3;
+lambda2 = 0.05;
 num_of_matrix = log2(N);
-iterations = 1000;
+iterations = 100;
+TOL = 1e-03;
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Step 0: random initial Bhat and Phat and solve Xhat %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fprintf("Generating Random Phat...\n");
 for idx = 1:num_of_matrix
     dim = 2^idx; %dimension of the basic submatrix block  
@@ -32,28 +39,30 @@ for idx = 1:num_of_matrix
     half = n / 2;
     Bi = zeros(n);
     for i = 1 : half
-        Bi(i,i) = randn(1);
-        Bi(half + i, i) = randn(1);
-        Bi(half + i, half + i) = randn(1);
-        Bi(i, half + i) = randn(1);
+        Bi(i,i) = randn(1) + randn(1) * j;
+        Bi(half + i, i) = randn(1)+ randn(1) * j;
+        Bi(half + i, half + i) = randn(1)+ randn(1) * j;
+        Bi(i, half + i) = randn(1)+ randn(1) * j;
     end
     Bhat{idx} = Bi;
 end
+Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, .5);
+B = Bhat;
 
-
-Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, lambda);
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%   Step 1: Iteratively solve Phat and Bhat and Xhat   %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 iter = 1;
-lambda_target=5e-2;
-lambda=5e-3;
+lambda_target=0.1;
+lambda=0.05;
 while iter < iterations
-    %%%%%%%%%%
-    lambda=min(1.1*lambda,lambda_target);
+    %%%%%%%%%
+    lambda=min(1.1*lambda, lambda_target);
     lambda
     %%%%%%%%%%
     
     fprintf("----------------------iteration %d--------------------------\n", iter)
-    % from right to left, iteratively solve B 2*2, 4*4, 8*8, .....
+    % from right to left, iteratively solve B: 2*2, 4*4, 8*8, .....
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %                            Solve P                                   %
@@ -80,9 +89,10 @@ while iter < iterations
             Pi = kron(Ii, Pi);
             Rfix = Pi * Rfix;
         end
-        %TODO:update P{idx}
+        %TODO:update P{idx} Find a better way for doing this
         % Y = AX = Lfix * (kron(Ii,Phat{idx})) * Rfix
         % Y(:) = kron(Rfix, Lfix) * (kron(Ii,Phat{idx}))(:)
+        fprintf("\n");
         fprintf("    Updating Phat{%d}\n", idx);
         cvx_begin quiet
             variable Pidx(n, n)
@@ -95,15 +105,15 @@ while iter < iterations
                     sum(Pidx(:, k)) == 1;
                 end
         cvx_end
-        fprintf("    target is %f\n", norm(Lfix * kron(eye(N/2^idx), Pidx) * Rfix - Y, 'fro'))
         Phat{idx} = Pidx;
+        fprintf("    target is %f\n", norm(get_A(Bhat,Phat) * Xhat - Y, 'fro'));
         % update X
     end
-    
- 
-%     Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, lambda);
-
-
+     
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %                            Solve B                                   %
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    fprintf('\n');
     % calculate L and R
     for idx = 1: num_of_matrix
         Pfix = multiplicationP(Phat);
@@ -127,23 +137,78 @@ while iter < iterations
         fprintf("\n");
         fprintf("    Updating Bhat{%d}\n", idx); 
         % Let B be butterfly, i.e. restrict the zero position
-        cvx_begin quiet
-            variable Bidx(n,n) complex
-            minimize norm(Lfix * kron(eye(N/2^idx), Bidx) * Rfix - Y, 'fro')
-            subject to
-            norm(Bidx, 'fro') <= 2 * sqrt(2^(idx-1))
-            for i = 1 : n
-                for j = 1 : n  
-                    if i ~= j && (i - n/2) ~= j && (j - n/2) ~= i
-                        Bidx(i,j) == 0
-                    end
-                end
-            end
-        cvx_end
+
+        [ridx, cidx] = find(B{idx});
+
+        RL = zeros(N*p, n^2);
+        for j = 1:N/2^idx
+            Rj = Rfix(((j-1) * n + 1): j * n, :);
+            Lj = Lfix(:, (j-1) * n + 1: j * n);
+            RL = RL  + kron(Rj.', Lj);
+        end
+
+        non_zero_b_idx = find(B{idx}(:));
+        RLs = RL(:,non_zero_b_idx);
+        
+   
+        if idx == 1
+            bhat = inv(RLs.' * RLs + lambda2 * eye(4)) * RLs.' * y;
+        else
+            bhat = RLs\y;
+        end
+        norm(bhat)
+        Bidx = sparse(ridx, cidx, bhat);
+%  
+%         cvx_begin quiet
+%             variable Bidxc(n,n) complex
+%             minimize norm(Lfix * kron(eye(N/2^idx), Bidxc) * Rfix - Y, 'fro')
+%             subject to
+%             norm(Bidxc, 'fro') <= 2 * sqrt(2^(idx-1))
+%             for i = 1 : n
+%                 for j = 1 : n  
+%                     if i ~= j && (i - n/2) ~= j && (j - n/2) ~= i
+%                         Bidxc(i,j) == 0
+%                     end
+%                 end
+%             end
+%         cvx_end
+%         
+%         fprintf("    difference between LS and cvx in Frobenius norm is %f \n", norm(Bidxc - Bidx, 'fro'))
+% 
+%         
+%         fprintf("    target cvx is %f\n", norm(Lfix * kron(eye(N/(2^idx)), Bidxc) * Rfix - Y, 'fro'))
+        fprintf("    target ls  is %f\n", norm(Lfix * kron(eye(N/(2^idx)), Bidx) * Rfix - Y, 'fro'))
         Bhat{idx} = Bidx;
-        fprintf("    target is %f\n", norm(Lfix * kron(eye(N/2^idx), Bidx) * Rfix - Y, 'fro'))
     end
-%     B_est{iter} = Bhat;
     Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, lambda);
+    target = norm(get_A(Bhat, Phat) * Xhat - Y, 'fro');
+    sparsity = mean((norms(Xhat,1)./norms(Xhat,2)).^2);
+    fprintf("    target  is %f ", target)
+    fprintf(" target < TOL: %d\n", target < TOL)
+    fprintf("    sparsity is %f ", sparsity)
+    fprintf("sparse: %d\n", sparsity <= 0.5 * N)
+    
+    if target < TOL && sparsity <= 0.1 * N
+        break
+    end
     iter = iter + 1;
 end
+
+fprintf("Optimization finished");
+mean((norms(Xhat,1)./norms(Xhat,2)).^2) % sparsity of Xhat
+
+Aest = get_A(Bhat, Phat);
+svd(abs(Aest))
+Xest = Aest\Y;
+mean((norms(Xest,1)./norms(Xest,2)).^2)
+histfit(sort(real(Xest(:))),50)
+
+
+F = kron(dftmtx(2),dftmtx(4));
+XFourier = F * Y;
+mean((norms(XFourier,1)./norms(XFourier,2)).^2)
+figure
+histfit(sort(real(XFourier(:))),50)
+
+
+% todo: learn for image it self

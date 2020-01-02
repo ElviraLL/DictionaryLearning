@@ -1,37 +1,20 @@
-function Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, lambda, X)
+function Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, lambda)
     % step 0.1: calculate Ahat for random initials
     % multiply Phat to A
-    Ahat = eye(N);
-    for idx = num_of_matrix: -1: 1
-        Pi = Phat{idx};
-        Ii = eye(N/(2^idx));
-        Pi = kron(Ii, Pi);
-        Ahat = Pi * Ahat;
-    end
-    
-    %multiply Bhat to Ahat
-    for idx = 1:num_of_matrix
-        Bi = Bhat{idx};
-        % fprintf("size of bi is %d, ", size(Bi)*[1;0])
-        Ii = eye(N/(2^idx));
-        Bi = kron(Ii, Bi);
-        % fprintf("size of Ii is %d, size of Bi is %d, size of Ahat is %d\n", size(Ii)*[1;0], size(Bi)*[1;0], size(Ahat)*[1;0])
-        Ahat = Bi * Ahat;
-    end
-    
+    Ahat = get_A(Bhat,Phat);
     % optimize over X 
     % x_temp = solve X from min\|Y - Ahat*X\|_F + lambda * \|X\|_1
     fprintf('    Updating X\n')
     Aflat = kron(eye(p,p),Ahat);
     yflat = Y(:);
     cvx_begin quiet
-        variable Xs(N*p, 1)
+        variable Xs(N*p, 1) complex
         minimize norm(Aflat * Xs - yflat, 2) + lambda * norm(Xs, 1)
     cvx_end
     
     Xhat = reshape(Xs, [N,p]);
-    error = norm(Xhat - X, 'fro') / norm(X, 'fro');
-    fprintf ("    Relative error in X is %f\n", error);
+%     error = norm(Xhat - X, 'fro') / norm(X, 'fro');
+%     fprintf ("    Relative error in X is %f\n", error);
     fprintf ("\n");
     % Xhat(Xhat<0.00000001) = 0
 end
