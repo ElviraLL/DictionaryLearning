@@ -4,19 +4,20 @@
 clc;
 clear;
 
-N = 2^5;
-p = 100;
+N = 2^6;
+p = 200;
 lambda = 0.3;
 lambda2 = 0.5;
 num_of_matrix = log2(N);
-iterations = 50;
+iterations = 160;
 TOL = 1e-03;
 
 fprintf("Generating X...\n");
 for i = 1:p
     X(:,i) = full(sprand(N,1,0.2));
 end
-A = dftmtx(N);
+%A = dftmtx(N);
+A = hadamard(N);
 Y = A*X;
 y = Y(:);
 
@@ -59,11 +60,14 @@ Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, 0.005);
 iter = 1;
 lambda_target=0.1;
 lambda=0.05;
+
+k_target = 0.4 * N;
+k = N;
 while iter < iterations
-%     %%%%%%%%%
+%%%%%%%%%%
 %     lambda=min(1.1*lambda, lambda_target);
 %     lambda
-    %%%%%%%%%%
+%%%%%%%%%%
     
     fprintf("----------------------iteration %d--------------------------\n", iter)
     % from right to left, iteratively solve B: 2*2, 4*4, 8*8, .....
@@ -111,6 +115,16 @@ while iter < iterations
         pidx = reshape(ph, [n,n]);
         
         Phat{idx} = pidx;
+        
+        
+        %%%%%%DANGER%%%%%%
+        [vv, ii]=max(Phat{idx});
+        Temp=zeros(n);
+        for jj=1:n
+            
+            Temp(ii(jj),jj)=1;
+        end
+        %%%%%%%%%%%%%%%%%%
         fprintf("    target is %f\n", norm(get_A(Bhat,Phat) * Xhat - Y, 'fro'));
     end
      
@@ -152,47 +166,47 @@ while iter < iterations
         non_zero_b_idx = find(B0{idx}(:));
         RLs = RL(:,non_zero_b_idx);
         
-        bhat = inv(RLs.' * RLs + lambda2 * eye(2^(idx+1))vb   v   ) * RLs.' * y;
 
-%         if idx == 1 
-%             bhat = inv(RLs.' * RLs + lambda2 * eye(4)) * RLs.' * y;
-%         else
-%             bhat = RLs\y;
-%         end
+        if idx == 1 
+            bhat = inv(RLs.' * RLs + lambda2 * eye(4)) * RLs.' * y;
+        else
+            bhat = RLs\y;
+        end
+                
 %         [mm,nn] = size(RLs);
 %         cvx_begin
 %         variable bhat(nn,1)
 %         minimize (norm(y - RLs * bhat, 2))
 %         subject to 
-%             norm(bhat) <= 5
+%             norm(bhat) <= 5*sqrt(n)
 %         cvx_end 
-%         
         
-        norm(bhat);
+        
         Bidx = sparse(ridx, cidx, bhat);
-        fprintf("    target ls  is %f\n", norm(Lfix * kron(eye(N/(2^idx)), Bidx) * Rfix - Y, 'fro'))
-        Bhat{idx} = Bidx;
+        Bhat{idx} = Bidx./norms(Bidx);
     end
-    %Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, 0.5);
-    %Xhat = updateXspgl1(Bhat, Phat, Y, Xhat, norm(Y,'fro')*.9^iter);
+    target = norm(get_A(Bhat, Phat) * Xhat - Y, 'fro')
     
-    Xhat = updateXspgl1(Bhat, Phat, Y, Xhat, norm(Y,'fro')*.9^iter);
-
-    
-    
-    target = norm(get_A(Bhat, Phat) * Xhat - Y, 'fro');
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %                            Solve X                                  %
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    Xhat = updateXspgl1(Bhat, Phat, Y, Xhat, norm(Y,'fro')*.9^iter, []);
+     
+%     k = max(k_target,floor(0.99 * k));
+%     Xhat = updateXOMP(k, Bhat, Phat, Y);
+%     target = norm(get_A(Bhat, Phat) * Xhat - Y, 'fro');
     sparsity = mean((norms(Xhat,1)./norms(Xhat,2)).^2);
     fprintf("    target  is %f ", target)
     fprintf(" target < TOL: %d\n", target < TOL)
     fprintf("    sparsity is %f ", sparsity)
     fprintf("sparse: %d\n", sparsity <= 0.5 * N)
     
-    if target < TOL && sparsity <= 0.1 * N
+    if target < TOL && sparsity <= 0.5 * N
         break
     end
     iter = iter + 1
 end
-
+%%
 fprintf("Optimization finished");
 Aest = get_A(Bhat, Phat);
 svd((Aest))
@@ -225,6 +239,5 @@ absXhat = abs(Xhat);
 % mean((norms(XFourier b ,1)./no        67y9rms(XFourier,2)).^2)
 % figure
 % histfit(sort(real(XFourier(:))),50)
-
 
 % todo: learn for image it self

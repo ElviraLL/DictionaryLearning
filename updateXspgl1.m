@@ -1,4 +1,4 @@
-function Xhat = updateXspgl1(Bhat, Phat, Y, X0, sigma)
+function Xhat = updateXspgl1(Bhat, Phat, Y, X0, sigma, tau)
     % step 0.1: calculate Ahat for random initials
     % multiply Phat to A
     [N, p] = size(Y);
@@ -9,9 +9,10 @@ function Xhat = updateXspgl1(Bhat, Phat, Y, X0, sigma)
     Aflat = kron(eye(p,p),Ahat);
     yflat = Y(:);
     options.iterations=500;
-    options.verbosity=1;
-    %Xs=spgl1(Aflat, yflat, [], sigma, X0(:), options);
-    Xs = spg_bpdn(Aflat, yflat, sigma, options);
+    options.verbosity=0;
+%     Xs = spgl1(Aflat, yflat, [], sigma, X0(:), options);
+     Xs = spg_bpdn(Aflat, yflat, sigma, options);
+%     Xs = spg_lasso(Aflat, yflat, tau, options);
     Xhat = reshape(Xs, [N,p]);
 %     error = norm(Xhat - X, 'fro') / norm(X, 'fro');
 %     fprintf ("    Relative error in X is %f\n", error);
