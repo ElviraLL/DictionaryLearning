@@ -1,15 +1,21 @@
+% Problems to solve: some x_i is all zero, maybe it is too sparse? recover
+% x_i individually?
+% normalize A in each iteration?
+
+
+
 % real matrix A, real X, real y, 
 % linear constrained ls to sove permutation
 % ls to solve butterfly
 clc;
 clear;
 
-N = 2^6;
+N = 2^5;
 p = 200;
 lambda = 0.3;
 lambda2 = 0.5;
 num_of_matrix = log2(N);
-iterations = 160;
+iterations = 50;
 TOL = 1e-03;
 
 fprintf("Generating X...\n");
@@ -41,10 +47,14 @@ for idx = 1:num_of_matrix
     half = n / 2;
     Bi = zeros(n);
     for i = 1 : half
-        Bi(i,i) = randn(1) + randn(1) * j;
-        Bi(half + i, i) = randn(1)+ randn(1) * j;
-        Bi(half + i, half + i) = randn(1)+ randn(1) * j;
-        Bi(i, half + i) = randn(1)+ randn(1) * j;
+%         Bi(i,i) = randn(1) + randn(1) * j;
+%         Bi(half + i, i) = randn(1)+ randn(1) * j;
+%         Bi(half + i, half + i) = randn(1)+ randn(1) * j;
+%         Bi(i, half + i) = randn(1)+ randn(1) * j;
+        Bi(i,i) = randn(1);
+        Bi(half + i, i) = randn(1);
+        Bi(half + i, half + i) = randn(1);
+        Bi(i, half + i) = randn(1);
     end
     B0{idx} = Bi;
 end
@@ -110,8 +120,8 @@ while iter < iterations
         Aeq = [kron(eye(n), ones(n,1).'); kron(ones(n,1).', eye(n))];
         beq = [ones(2*n,1)];
         
-
-        ph = lsqlin(RL_real, y_real, [],[], Aeq, beq, zeros(n^2,1), ones(n^2,1));
+        options = optimoptions('lsqlin','Display',"off");
+        ph = lsqlin(RL_real, y_real, [],[], Aeq, beq, zeros(n^2,1), ones(n^2,1),[],options);
         pidx = reshape(ph, [n,n]);
         
         Phat{idx} = pidx;
@@ -181,7 +191,6 @@ while iter < iterations
 %             norm(bhat) <= 5*sqrt(n)
 %         cvx_end 
         
-        
         Bidx = sparse(ridx, cidx, bhat);
         Bhat{idx} = Bidx./norms(Bidx);
     end
@@ -190,12 +199,18 @@ while iter < iterations
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %                            Solve X                                  %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    Xhat = updateXspgl1(Bhat, Phat, Y, Xhat, norm(Y,'fro')*.9^iter, []);
+    Xhat = updateXspgl1(Bhat, Phat, Y, Xhat, norm(Y,'fro')*.95^(iter), []);
      
 %     k = max(k_target,floor(0.99 * k));
 %     Xhat = updateXOMP(k, Bhat, Phat, Y);
-%     target = norm(get_A(Bhat, Phat) * Xhat - Y, 'fro');
+    target = norm(get_A(Bhat, Phat) * Xhat - Y, 'fro');
     sparsity = mean((norms(Xhat,1)./norms(Xhat,2)).^2);
+    sparse_rec(iter) = sparsity;
+    Xrec{iter} = Xhat;
+    Brec{iter} = Bhat;
+    Prec{iter} = Phat;
+    target_rec{iter} = target;
+    
     fprintf("    target  is %f ", target)
     fprintf(" target < TOL: %d\n", target < TOL)
     fprintf("    sparsity is %f ", sparsity)
@@ -231,7 +246,8 @@ title("real(Aest' * A)")
 
 norm(multiplicationB(Bhat))
 absXhat = abs(Xhat);
-[mean((norms(absXhat,1)./norms(absXhat,2)).^2), mean((norms(Xhat,1)./norms(Xhat,2)).^2), mean((norms(Xest,1)./norms(Xest,2)).^2), mean((norms(X,1)./norms(X,2)).^2)]
+[mean((norms(Xhat,1)./norms(Xhat,2)).^2), mean((norms(Xest,1)./norms(Xest,2)).^2), mean((norms(X,1)./norms(X,2)).^2)]
+fprintf("Norm of Bhat are:")
 [norm(B0{1}), norm(B0{2}), norm(B0{3}), norm(B0{4})]
 
 % F = kron(dftmtx(2),dftmtx(4));
