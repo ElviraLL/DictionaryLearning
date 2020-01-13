@@ -1,6 +1,5 @@
-% Problems to solve: some x_i is all zero, maybe it is too sparse? recover
-% x_i individually?
-% normalize A in each iteration?
+% x_i individually? not working
+% initial Phat in solver
 
 
 
@@ -10,23 +9,23 @@
 clc;
 clear;
 
-N = 2^5;
+N = 2^6;
 p = 200;
 lambda = 0.3;
 lambda2 = 0.5;
 num_of_matrix = log2(N);
-iterations = 50;
+iterations = 60;
 TOL = 1e-03;
 
 fprintf("Generating X...\n");
 for i = 1:p
     X(:,i) = full(sprand(N,1,0.2));
 end
-%A = dftmtx(N);
-A = hadamard(N);
+A = dftmtx(N);
+% A = hadamard(N);
 Y = A*X;
 y = Y(:);
-
+%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Step 0: random initial Bhat and Phat and solve Xhat %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -60,9 +59,9 @@ for idx = 1:num_of_matrix
 end
 Bhat = B0;
 
-
-Xhat = updateX(Phat, Bhat, Y, N , p, num_of_matrix, 0.005);
-
+Ahat = get_A(Bhat,Phat);
+% Xhat = updateX(false, Ahat, Y, N , p, 0.005); %for real matrices
+Xhat = updateX(true, Ahat, Y, N , p,  0.005); %for complex matrices
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Step 1: Iteratively solve Phat and Bhat and Xhat   %
@@ -192,15 +191,18 @@ while iter < iterations
 %         cvx_end 
         
         Bidx = sparse(ridx, cidx, bhat);
-        Bhat{idx} = Bidx./norms(Bidx);
+%         Bhat{idx} = Bidx./norms(Bidx);        
+        Bhat{idx} = Bidx;
     end
-    target = norm(get_A(Bhat, Phat) * Xhat - Y, 'fro')
     
+    Ahat = get_A(Bhat, Phat);
+    Ahat = Ahat./norms(Ahat+eps);
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %                            Solve X                                  %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    Xhat = updateXspgl1(Bhat, Phat, Y, Xhat, norm(Y,'fro')*.95^(iter), []);
+%    Xhat = updateXspgl1(Ahat, Y, Xhat, norm(Y,'fro')*.95^(iter), []);
      
+     Xhat = updateXsep(Ahat, Y, Xhat, 1*.99^iter, [], p);    
 %     k = max(k_target,floor(0.99 * k));
 %     Xhat = updateXOMP(k, Bhat, Phat, Y);
     target = norm(get_A(Bhat, Phat) * Xhat - Y, 'fro');
@@ -223,9 +225,8 @@ while iter < iterations
 end
 %%
 fprintf("Optimization finished");
-Aest = get_A(Bhat, Phat);
-svd((Aest))
-Xest = Aest\Y;
+svd((Ahat))
+Xest = Ahat\Y;
 
 
 subplot(2,2,1)
@@ -237,12 +238,12 @@ histfit(sort(real(Xhat(:))),50)
 title("sparsity of Xhat")
 
 subplot(2,2,3)
-imagesc(abs(Aest'*A))
-title("Aest' * A")
+imagesc(abs(Ahat'*A))
+title("Ahat' * A")
 
 subplot(2,2,4)
-imagesc(real(Aest'*A))
-title("real(Aest' * A)")
+imagesc(real(Ahat'*A))
+title("real(Ahat' * A)")
 
 norm(multiplicationB(Bhat))
 absXhat = abs(Xhat);
