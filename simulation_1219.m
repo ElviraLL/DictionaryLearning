@@ -1,20 +1,18 @@
 % x_i individually? not working
 % initial Phat in solver
 
-
-
 % real matrix A, real X, real y, 
 % linear constrained ls to sove permutation
 % ls to solve butterfly
 clc;
 clear;
 
-N = 2^6;
-p = 200;
+N = 2^3;
+p = 100;
 lambda = 0.3;
 lambda2 = 0.5;
 num_of_matrix = log2(N);
-iterations = 60;
+iterations = 2;
 TOL = 1e-03;
 
 fprintf("Generating X...\n");
@@ -61,8 +59,7 @@ Bhat = B0;
 
 Ahat = get_A(Bhat,Phat);
 % Xhat = updateX(false, Ahat, Y, N , p, 0.005); %for real matrices
-Xhat = updateX(true, Ahat, Y, N , p,  0.005); %for complex matrices
-
+Xhat = inv(Ahat)*Y;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Step 1: Iteratively solve Phat and Bhat and Xhat   %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -130,7 +127,6 @@ while iter < iterations
         [vv, ii]=max(Phat{idx});
         Temp=zeros(n);
         for jj=1:n
-            
             Temp(ii(jj),jj)=1;
         end
         %%%%%%%%%%%%%%%%%%
@@ -165,7 +161,6 @@ while iter < iterations
         fprintf("    Updating Bhat{%d}\n", idx); 
         % Let B be butterfly, i.e. restrict the zero position
         [ridx, cidx] = find(B0{idx}); % non-zero index of the matrix B{idx}
-
         RL = zeros(N*p, n^2);
         for j = 1:N/n
             Rj = Rfix(((j-1) * n + 1): j * n, :);
@@ -201,11 +196,12 @@ while iter < iterations
     %                            Solve X                                  %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %    Xhat = updateXspgl1(Ahat, Y, Xhat, norm(Y,'fro')*.95^(iter), []);
-     
-     Xhat = updateXsep(Ahat, Y, Xhat, 1*.99^iter, [], p);    
-%     k = max(k_target,floor(0.99 * k));
-%     Xhat = updateXOMP(k, Bhat, Phat, Y);
-    target = norm(get_A(Bhat, Phat) * Xhat - Y, 'fro');
+     sigma(iter) = 1*.98^iter;
+     Xhat = updateXsep(Ahat, Y, 1*.995^iter, p); 
+     diagnostic(iter,:)=[cond(full(Bhat{1})) cond(full(Bhat{2})) cond(full(Bhat{3})) norm(Xhat) mean((norms(Xhat,1).^2./norms(Xhat,2).^2))]
+     rel_target(iter) = norm(Ahat * Xhat - Y, 'fro')/norm(Y,'fro')
+
+    target = norm(Ahat * Xhat - Y, 'fro');
     sparsity = mean((norms(Xhat,1)./norms(Xhat,2)).^2);
     sparse_rec(iter) = sparsity;
     Xrec{iter} = Xhat;
@@ -248,9 +244,9 @@ title("real(Ahat' * A)")
 norm(multiplicationB(Bhat))
 absXhat = abs(Xhat);
 [mean((norms(Xhat,1)./norms(Xhat,2)).^2), mean((norms(Xest,1)./norms(Xest,2)).^2), mean((norms(X,1)./norms(X,2)).^2)]
-fprintf("Norm of Bhat are:")
-[norm(B0{1}), norm(B0{2}), norm(B0{3}), norm(B0{4})]
 
+figure
+plot(rel_target)
 % F = kron(dftmtx(2),dftmtx(4));
 % XFourier = F * Y;
 % mean((norms(XFourier b ,1)./no        67y9rms(XFourier,2)).^2)

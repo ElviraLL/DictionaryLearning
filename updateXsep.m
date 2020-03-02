@@ -1,4 +1,4 @@
-function Xhat = updateXsep(A, Y, X0, sigma, tau, p)
+function Xhat = updateXsep(A, Y, sigma, p)
     %Y = AX
     %y_i = A x_i
     options.verbosity=0;

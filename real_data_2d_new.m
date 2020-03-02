@@ -12,7 +12,7 @@ for i = 1 : 100
 end
 
 y = Y(:);
-N = 64;
+N = 2^6;
 p = 100;
 lambda = 0.3;
 lambda2 = 0.05;
